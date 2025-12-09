@@ -18257,9 +18257,11 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                 if (likely(JS_VALUE_IS_BOTH_INT(op1, op2))) {
                     int64_t r;
                     r = (int64_t)JS_VALUE_GET_INT(op1) + JS_VALUE_GET_INT(op2);
-                    if (unlikely((int)r != r))
-                        goto add_slow;
-                    sp[-2] = js_int32(r);
+                    if (unlikely((int)r != r)) {
+                        sp[-2] = js_float64((double)r);
+                    } else {
+                        sp[-2] = js_int32(r);
+                    }
                     sp--;
                 } else if (JS_VALUE_IS_BOTH_FLOAT(op1, op2)) {
                     JS_X87_FPCW_SAVE_AND_ADJUST(fpcw);
@@ -18268,7 +18270,6 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                     JS_X87_FPCW_RESTORE(fpcw);
                     sp--;
                 } else {
-                add_slow:
                     sf->cur_pc = pc;
                     if (js_add_slow(ctx, sp))
                         goto exception;
@@ -18288,9 +18289,11 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                     int64_t r;
                     r = (int64_t)JS_VALUE_GET_INT(*pv) +
                         JS_VALUE_GET_INT(sp[-1]);
-                    if (unlikely((int)r != r))
-                        goto add_loc_slow;
-                    *pv = js_int32(r);
+                    if (unlikely((int)r != r)) {
+                        *pv = js_float64((double)r);
+                    } else {
+                        *pv = js_int32(r);
+                    }
                     sp--;
                 } else if (JS_VALUE_GET_TAG(*pv) == JS_TAG_STRING) {
                     JSValue op1;
@@ -18306,7 +18309,6 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                     set_value(ctx, pv, op1);
                 } else {
                     JSValue ops[2];
-                add_loc_slow:
                     /* In case of exception, js_add_slow frees ops[0]
                        and ops[1], so we must duplicate *pv */
                     sf->cur_pc = pc;
@@ -18327,9 +18329,11 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                 if (likely(JS_VALUE_IS_BOTH_INT(op1, op2))) {
                     int64_t r;
                     r = (int64_t)JS_VALUE_GET_INT(op1) - JS_VALUE_GET_INT(op2);
-                    if (unlikely((int)r != r))
-                        goto binary_arith_slow;
-                    sp[-2] = js_int32(r);
+                    if (unlikely((int)r != r)) {
+                        sp[-2] = js_float64((double)r);
+                    } else {
+                        sp[-2] = js_int32(r);
+                    }
                     sp--;
                 } else if (JS_VALUE_IS_BOTH_FLOAT(op1, op2)) {
                     JS_X87_FPCW_SAVE_AND_ADJUST(fpcw);
@@ -18429,6 +18433,8 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                 op1 = sp[-1];
                 tag = JS_VALUE_GET_TAG(op1);
                 if (tag == JS_TAG_INT || JS_TAG_IS_FLOAT64(tag)) {
+                } else if (tag == JS_TAG_NULL || tag == JS_TAG_BOOL) {
+                    sp[-1] = JS_NewInt32(ctx, JS_VALUE_GET_INT(op1));
                 } else {
                     sf->cur_pc = pc;
                     if (js_unary_arith_slow(ctx, sp, opcode))
@@ -18444,7 +18450,9 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                 double d;
                 op1 = sp[-1];
                 tag = JS_VALUE_GET_TAG(op1);
-                if (tag == JS_TAG_INT) {
+                if (tag == JS_TAG_INT ||
+                    tag == JS_TAG_BOOL ||
+                    tag == JS_TAG_NULL) {
                     val = JS_VALUE_GET_INT(op1);
                     /* Note: -0 cannot be expressed as integer */
                     if (unlikely(val == 0)) {
